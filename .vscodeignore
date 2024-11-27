@@ -1,0 +1,27 @@
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/eslint.config.mjs
+**/*.map
+**/*.ts
+**/.vscode-test.*
+**/*.npy
+**/*.npz
+**/*.dat
+**/*.bin 
+# ignore python cache files
+__pycache__/
+venv/
+dist/
+build/
+*.egg-info/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pywz

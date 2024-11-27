@@ -1,0 +1,125 @@
+{
+  "name": "vscode-geoview",
+  "displayName": "geoview",
+  "description": "Display geophysics/seismic npy/dat files in VSCode.",
+  "version": "0.0.1",
+  "publisher": "Jintao Li",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JintaoLee-Roger/vscode-geoview.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JintaoLee-Roger/vscode-geoview/issues"
+  },
+  "activationEvents": [
+    "onLanguage:geoview"
+  ],
+  "main": "./out/extension.js",
+  "files": [
+    "out/**/*",
+    "python_scripts/**/*"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "geoview.changeCmap",
+        "title": "Change Colormap",
+        "category": "GeoView"
+      },
+      {
+        "command": "geoview.transpose",
+        "title": "Transpose Data",
+        "category": "GeoView"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "geoview.changeCmap",
+          "when": "viewType == 'vscode-geoview.geoviewEditor'",
+          "group": "navigation",
+          "args": {
+            "uri": [
+              "${resource}"
+            ]
+          }
+        },
+        {
+          "command": "geoview.transpose",
+          "when": "viewType == 'vscode-geoview.geoviewEditor'",
+          "group": "navigation",
+          "args": {
+            "uri": [
+              "${resource}"
+            ]
+          }
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "vscode-geoview.geoviewEditor",
+        "displayName": "GeoView Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.npy"
+          },
+          {
+            "filenamePattern": "*.dat"
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "GeoView Configuration",
+      "properties": {
+        "geoview.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Path to the Python interpreter."
+        },
+        "geoview.cmap": {
+          "type": "string",
+          "default": "gray",
+          "description": "Default colormap for visualization."
+        },
+        "geoview.defaultDimensions": {
+          "type": "string",
+          "default": "512,512",
+          "description": "Default data dimensions for .dat files."
+        },
+        "geoview.transpose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether need transpose data."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.95.0",
+    "@types/mocha": "^10.0.9",
+    "@types/node": "20.x",
+    "@typescript-eslint/eslint-plugin": "^8.10.0",
+    "@typescript-eslint/parser": "^8.7.0",
+    "eslint": "^9.13.0",
+    "typescript": "^5.6.3",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
