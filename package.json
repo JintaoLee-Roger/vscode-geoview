@@ -1,9 +1,9 @@
 {
   "name": "vscode-geoview",
-  "displayName": "geoview",
+  "displayName": "GeoView",
   "description": "Display geophysics/seismic npy/dat files in VSCode.",
   "version": "0.0.1",
-  "publisher": "Jintao Li",
+  "publisher": "JintaoLi",
   "engines": {
     "vscode": "^1.95.0"
   },
@@ -72,6 +72,9 @@
           },
           {
             "filenamePattern": "*.dat"
+          },
+          {
+            "filenamePattern": "*.bin"
           }
         ]
       }

@@ -5,10 +5,10 @@ import { exec } from 'child_process';
 export function activate(context: vscode.ExtensionContext) {
   console.log('GeoView extension is now active!');
 
-  // 初始化每个文件的设置存储
+  // Initialize settings storage for each file
   const perFileSettings: { [key: string]: { cmap?: string; dataDimensions?: string; transpose?: boolean } } = {};
 
-  // 注册自定义只读编辑器
+  // Register custom readonly editor
   const provider = new GeoViewEditorProvider(context, perFileSettings);
   context.subscriptions.push(
     vscode.window.registerCustomEditorProvider(
@@ -22,16 +22,16 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // 注册命令以更改特定文件的cmap
+  // Register command to change cmap for a specific file
   context.subscriptions.push(
     vscode.commands.registerCommand('geoview.changeCmap', async (uri?: vscode.Uri) => {
       if (!uri) {
-        // 尝试从活动的自定义编辑器获取 URI
+        // Try to get URI from the active custom editor
         const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
         if (activeTab && activeTab.input instanceof vscode.TabInputCustom) {
           uri = activeTab.input.uri;
         } else {
-          vscode.window.showErrorMessage('没有活动的GeoView编辑器。');
+          vscode.window.showErrorMessage('No active GeoView editor.');
           return;
         }
       }
@@ -41,31 +41,31 @@ export function activate(context: vscode.ExtensionContext) {
       ];
 
       const selectedCmap = await vscode.window.showQuickPick(cmapOptions, {
-        placeHolder: '请选择用于可视化的色彩映射（cmap）',
+        placeHolder: 'Please select a colormap (cmap) for visualization',
       });
 
       if (selectedCmap) {
         perFileSettings[uri.toString()] = perFileSettings[uri.toString()] || {};
         perFileSettings[uri.toString()].cmap = selectedCmap;
 
-        // 获取对应的 WebviewPanel
+        // Get the corresponding WebviewPanel
         const panel = GeoViewEditorProvider.getPanelForUri(uri);
         if (panel) {
-          // 获取对应的文档
+          // Get the corresponding document
           const document = GeoViewEditorProvider.getDocumentForUri(uri);
           if (!document) {
-            vscode.window.showErrorMessage('无法找到对应的文档。');
+            vscode.window.showErrorMessage('Cannot find the corresponding document.');
             return;
           }
 
           const workspacePath = document.workspacePath;
 
-          // 获取最新的 dataDimensions
+          // Get the latest dataDimensions
           const fileSettings = perFileSettings[uri.toString()] || {};
           const dataDimensions = fileSettings.dataDimensions || vscode.workspace.getConfiguration('geoview').get<string>('defaultDimensions', '512,512');
           const transpose = fileSettings.transpose || vscode.workspace.getConfiguration('geoview').get<boolean>('transpose', true);
 
-          // 重新生成可视化
+          // Regenerate visualization
           let imagePath: string;
           try {
             imagePath = await generateVisualization(uri.fsPath, workspacePath, selectedCmap, dataDimensions, transpose, context);
@@ -82,54 +82,54 @@ export function activate(context: vscode.ExtensionContext) {
 
           const imageUri = panel.webview.asWebviewUri(vscode.Uri.file(imagePath));
 
-          // 发送消息给 Webview，更新图像
+          // Send message to Webview to update the image
           panel.webview.postMessage({ command: 'updateImage', imageUri: imageUri.toString() });
         } else {
-          vscode.window.showErrorMessage('无法找到对应的 GeoView 编辑器。');
+          vscode.window.showErrorMessage('Cannot find the corresponding GeoView editor.');
         }
       }
     })
   );
 
-  // 注册命令以切换 transpose
+  // Register command to toggle transpose
   context.subscriptions.push(
     vscode.commands.registerCommand('geoview.transpose', async (uri?: vscode.Uri) => {
       if (!uri) {
-        // 尝试从活动的自定义编辑器获取 URI
+        // Try to get URI from the active custom editor
         const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
         if (activeTab && activeTab.input instanceof vscode.TabInputCustom) {
           uri = activeTab.input.uri;
         } else {
-          vscode.window.showErrorMessage('没有活动的GeoView编辑器。');
+          vscode.window.showErrorMessage('No active GeoView editor.');
           return;
         }
       }
 
-      // 获取文件设置
+      // Get file settings
       perFileSettings[uri.toString()] = perFileSettings[uri.toString()] || {};
       const fileSettings = perFileSettings[uri.toString()];
       const defaultTranspose = vscode.workspace.getConfiguration('geoview').get<boolean>('transpose', true);
 
       const currentTranspose = fileSettings.transpose !== undefined ? fileSettings.transpose : defaultTranspose;
 
-      // 切换 transpose 值
+      // Toggle transpose value
       const newTranspose = !currentTranspose;
       fileSettings.transpose = newTranspose;
 
-      // 获取其他参数
+      // Get other parameters
       const cmap = fileSettings.cmap || vscode.workspace.getConfiguration('geoview').get<string>('cmap', 'gray');
       const dataDimensions = fileSettings.dataDimensions || vscode.workspace.getConfiguration('geoview').get<string>('defaultDimensions', '512,512');
 
-      // 获取对应的文档
+      // Get the corresponding document
       const document = GeoViewEditorProvider.getDocumentForUri(uri);
       if (!document) {
-        vscode.window.showErrorMessage('无法找到对应的文档。');
+        vscode.window.showErrorMessage('Cannot find the corresponding document.');
         return;
       }
 
       const workspacePath = document.workspacePath;
 
-      // 重新生成可视化
+      // Regenerate visualization
       let imagePath: string;
       try {
         imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, newTranspose, context);
@@ -138,7 +138,7 @@ export function activate(context: vscode.ExtensionContext) {
         return;
       }
 
-      // 更新 Webview
+      // Update Webview
       const panel = GeoViewEditorProvider.getPanelForUri(uri);
       if (panel) {
         const tempDir = path.join(workspacePath, '.geoview_temp');
@@ -149,13 +149,17 @@ export function activate(context: vscode.ExtensionContext) {
 
         const imageUri = panel.webview.asWebviewUri(vscode.Uri.file(imagePath));
 
-        // 发送消息给 Webview，更新图像
+        // Send message to Webview to update the image
         panel.webview.postMessage({ command: 'updateImage', imageUri: imageUri.toString() });
       } else {
-        vscode.window.showErrorMessage('无法找到对应的 GeoView 编辑器。');
+        vscode.window.showErrorMessage('Cannot find the corresponding GeoView editor.');
       }
 
-      vscode.window.showInformationMessage(`数据已${newTranspose ? '转置' : '恢复原始'}`);
+      if (newTranspose) {
+        vscode.window.showInformationMessage("Visualization data 2D: d.T, 3D: d[idx, :, :].T");
+      } else {
+        vscode.window.showInformationMessage("Visualization data 2D: d, 3D: d[:, :, idx]");
+      }
     })
   );
 }
@@ -182,7 +186,7 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
     openContext: { backupId?: string },
     token: vscode.CancellationToken
   ): Promise<GeoViewDocument> {
-    // 获取工作区路径
+    // Get workspace path
     const workspaceFolders = vscode.workspace.workspaceFolders;
     let workspacePath: string;
 
@@ -193,7 +197,7 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
       throw new Error('No workspace folder is open.');
     }
 
-    // 创建并返回自定义文档对象
+    // Create and return custom document object
     const document = new GeoViewDocument(uri, workspacePath);
     GeoViewEditorProvider.documents.set(uri.toString(), document);
     return document;
@@ -207,22 +211,22 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
     const uri = document.uri;
     const workspacePath = document.workspacePath;
 
-    // 将面板添加到 openPanels
+    // Add panel to openPanels
     GeoViewEditorProvider.openPanels.set(uri.toString(), webviewPanel);
 
-    // 监听面板关闭事件，移除面板和文档
+    // Listen for panel dispose event, remove panel and document
     webviewPanel.onDidDispose(() => {
       GeoViewEditorProvider.openPanels.delete(uri.toString());
       GeoViewEditorProvider.documents.delete(uri.toString());
     });
 
-    // 获取默认配置
+    // Get default configuration
     const config = vscode.workspace.getConfiguration('geoview');
     const defaultCmap = config.get<string>('cmap', 'gray');
     const defaultDimensions = config.get<string>('defaultDimensions', '512,512');
     const defaultTranspose = config.get<boolean>('transpose', true);
 
-    // 获取特定文件的设置
+    // Get settings for the specific file
     const fileSettings = this.perFileSettings[uri.toString()] || {};
     const cmap = fileSettings.cmap || defaultCmap;
     let dataDimensions: string = fileSettings.dataDimensions || defaultDimensions;
@@ -231,38 +235,37 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
     let imagePath: string;
 
     try {
-      // 调用 generateVisualization 生成图像
+      // Call generateVisualization to generate the image
       imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, transpose, this.context);
     } catch (error: any) {
-      // 如果是维度错误，提示用户输入新的维度
+      // If it's a dimension error, prompt the user to input new dimensions
       if (error.message === 'DimensionError') {
         const input = await vscode.window.showInputBox({
-          prompt: '请输入数据维度（例如：512,512 或 512,512,512）',
-          placeHolder: '行数,列数[,深度]',
+          prompt: 'Please enter data dimensions (e.g., 512,512 or 512,512,512)',
+          placeHolder: 'rows,columns[,depth]',
           validateInput: (value) => {
             if (!/^\d+\s*,\s*\d+(\s*,\s*\d+)?$/.test(value.trim())) {
-              return '请输入有效的维度格式：行数,列数[,深度]';
+              return 'Please enter a valid dimension format: rows,columns[,depth]';
             }
             return null;
           },
         });
 
         if (!input) {
-          vscode.window.showErrorMessage('未输入数据维度，操作已取消。');
+          vscode.window.showErrorMessage('No data dimensions provided, operation cancelled.');
           return;
-          // throw new Error('No data dimensions provided.');
         }
 
         dataDimensions = input;
 
-        // 更新特定文件的维度设置
+        // Update dimensions setting for the specific file
         this.perFileSettings[uri.toString()] = this.perFileSettings[uri.toString()] || {};
         this.perFileSettings[uri.toString()].dataDimensions = dataDimensions;
 
-        // 再次尝试生成可视化
+        // Try generating visualization again
         imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, transpose, this.context);
       } else if (error.message === 'FormatError') {
-        vscode.window.showErrorMessage('文件格式无效或不支持。');
+        vscode.window.showErrorMessage('Invalid or unsupported file format.');
         return;
       } else {
         vscode.window.showErrorMessage(`GeoView Error: ${error.message}`);
@@ -272,23 +275,23 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
 
     const tempDir = path.join(workspacePath, '.geoview_temp');
 
-    // 将临时目录添加到 localResourceRoots
+    // Add temporary directory to localResourceRoots
     webviewPanel.webview.options = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.file(tempDir)],
     };
 
-    // 将图像路径转换为 Webview URI
+    // Convert image path to Webview URI
     const imageUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(imagePath));
     console.log(`Image URI: ${imageUri.toString()}`);
 
-    // 生成并设置 Webview 内容
+    // Generate and set Webview content
     webviewPanel.webview.html = this.getWebviewContent(imageUri);
 
-    // 添加消息处理
+    // Add message handling
     webviewPanel.webview.onDidReceiveMessage(async (message) => {
       if (message.command === 'refresh') {
-        // 处理其他消息，如果有的话
+        // Handle other messages if any
       }
     });
   }
@@ -298,7 +301,7 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
       <!DOCTYPE html>
       <html lang="en">
       <body>
-        <img id="geoview-image" src="${imageUri}" style="width: 100%; height: auto;" />
+        <img id="geoview-image" src="${imageUri}" style="width: auto; height: 100%;" />
         <script>
           const vscode = acquireVsCodeApi();
           window.addEventListener('message', event => {
@@ -324,7 +327,7 @@ class GeoViewDocument implements vscode.CustomDocument {
   }
 
   dispose(): void {
-    // 文档关闭时的清理操作
+    // Cleanup operations when the document is closed
   }
 }
 
@@ -337,30 +340,30 @@ async function generateVisualization(
   context: vscode.ExtensionContext
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    // 获取用户配置
+    // Get user configuration
     const config = vscode.workspace.getConfiguration('geoview');
     const pythonPath = config.get<string>('pythonPath', 'python');
     const scriptPath = config.get<string>(
       'scriptPath',
       path.join(context.extensionPath, 'python_scripts', 'visualize.py')
     );
-    // 使用工作区目录作为临时文件夹
+    // Use workspace directory as temporary folder
     const tempDir = config.get<string>('tempDir', path.join(workspacePath, '.geoview_temp'));
     const imageSize = config.get<any>('imageSize', { width: 800, height: 600 });
 
-    // 确保临时目录存在
+    // Ensure temporary directory exists
     const fs = require('fs');
     if (!fs.existsSync(tempDir)) {
       fs.mkdirSync(tempDir, { recursive: true });
       console.log(`[GeoView] Created temporary directory: ${tempDir}`);
     }
 
-    // 生成唯一的图像文件名，防止冲突
+    // Generate a unique image file name to avoid conflicts
     const crypto = require('crypto');
     const imageFileName = `geoview_${crypto.randomBytes(8).toString('hex')}.png`;
     const imagePath = path.join(tempDir, imageFileName);
 
-    // 构建命令行参数
+    // Build command line arguments
     const args = [
       scriptPath,
       filePath,
@@ -377,7 +380,7 @@ async function generateVisualization(
       args.push(`--transpose`);
     }
 
-    // 执行 Python 脚本
+    // Execute Python script
     const command = `${pythonPath} ${args.map((a) => `"${a}"`).join(' ')}`;
     console.log(`[GeoView] Executing command: ${command}`);
 
@@ -386,7 +389,7 @@ async function generateVisualization(
         console.error(`[GeoView] Error: ${error.message}`);
         console.error(`[GeoView] stderr: ${stderr}`);
 
-        // 检查错误类型
+        // Check error type
         if (stderr.includes('cannot reshape array') || stderr.includes('ValueError')) {
           reject(new Error('DimensionError'));
         } else if (stderr.includes('Invalid file format') || stderr.includes('Exception')) {
@@ -405,13 +408,13 @@ async function generateVisualization(
 export function deactivate() {
   console.log('GeoView extension is now deactivated.');
 
-  // 获取工作区路径
+  // Get workspace path
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (workspaceFolders && workspaceFolders.length > 0) {
     const workspacePath = workspaceFolders[0].uri.fsPath;
     const tempDir = path.join(workspacePath, '.geoview_temp');
 
-    // 删除临时目录及其中的所有文件
+    // Delete temporary directory and all its files
     const fs = require('fs');
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true, force: true });

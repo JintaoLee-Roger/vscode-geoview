@@ -148,34 +148,48 @@ def get_cmap_from(name):
 
 
 def parser_npy_header(file_path):
-    # 打开文件读取头信息
+    # Open the file and read the header information
     with open(file_path, 'rb') as f:
-        # 检查 magic string
+        # Check the magic string
         magic = f.read(6)
-        assert magic == b'\x93NUMPY', "不是合法的 .npy 文件"
+        assert magic == b'\x93NUMPY', "Not a valid .npy file"
 
-        # 读取版本号
+        # Read the version number
         version = f.read(2)
         major, minor = version[0], version[1]
 
-        # 根据版本号读取 header 的长度
+        # Read the header length based on the version number
         if major == 1:
             header_len = np.frombuffer(f.read(2), dtype=np.uint16)[0]
         elif major == 2:
             header_len = np.frombuffer(f.read(4), dtype=np.uint32)[0]
         else:
-            raise ValueError("不支持的 .npy 版本")
+            raise ValueError("Unsupported .npy version")
 
-        # 读取 header 内容
+        # Read the header content
         header = f.read(header_len)
-        header = eval(header.decode('latin1'))  # 将字符串转为字典
+        header = eval(header.decode('latin1'))
 
-        # 提取 shape 和 dtype
+        # Extract shape and dtype
         shape = header['shape']
         dtype = np.dtype(header['descr'])
-        offset = f.tell()  # 数据偏移量，紧接 header 之后
+        offset = f.tell()  # Data offset, immediately after the header
 
     return shape, dtype, offset
+
+
+def auto_clim(d, scale=1):
+    v1 = np.nanmin(d)
+    v2 = np.nanmax(d)
+    if v1 == v2:
+        return [v1 - 0.1, v1 + 0.2]
+    if v1 * v2 < 0:
+        if abs(v1) / abs(v2) < 0.05 or abs(v1) / abs(v2) > 20:
+            return [v1 * scale, v2 * scale]
+        else:
+            v = min(abs(v1), abs(v2)) * scale
+            return [-v, v]
+    return [v1 * scale, v2 * scale]
 
 
 def visualize(file_path,
@@ -196,9 +210,16 @@ def visualize(file_path,
         dims = shape
         if ndim == 2:
             data = np.load(file_path)
+            if transpose:
+                data = data.T
         else:
-            idx = int(shape[0] // 2)
-            data = np.memmap(file_path, dtype, 'c', offset, shape)[idx]
+            if transpose:
+                idx = int(shape[0] // 2)
+                data = np.memmap(file_path, dtype, 'c', offset, shape)[idx].T
+            else:
+                idx = int(shape[2] // 2)
+                data = np.memmap(file_path, dtype, 'c', offset, shape)[:, :,
+                                                                       idx]
     else:
         dims = list(map(int, dims.split(',')))
         num_elements = np.prod(dims)
@@ -211,9 +232,17 @@ def visualize(file_path,
             ndim = len(dims)
             if len(dims) == 2:
                 data = np.fromfile(file_path, dtype=np.float32).reshape(dims)
+                if transpose:
+                    data = data.T
             elif len(dims) == 3:
-                idx = int(dims[0] // 2)
-                data = np.memmap(file_path, np.float32, 'c', shape=dims)[idx]
+                if transpose:
+                    idx = int(dims[0] // 2)
+                    data = np.memmap(file_path, np.float32, 'c',
+                                     shape=dims)[idx].T
+                else:
+                    idx = int(dims[2] // 2)
+                    data = np.memmap(file_path, np.float32, 'c',
+                                     shape=dims)[:, :, idx]
         else:
             # Extract dimensions from the filename
             match = re.search(
@@ -240,30 +269,38 @@ def visualize(file_path,
                 ndim = len(dims)
                 if len(dims) == 2:
                     data = np.fromfile(file_path, np.float32).reshape(dims)
+                    if transpose:
+                        data = data.T
                 elif len(dims) == 3:
-                    idx = int(dims[0] // 2)
-                    data = np.memmap(file_path, np.float32, 'c',
-                                     shape=dims)[idx]
+                    if transpose:
+                        idx = int(dims[0] // 2)
+                        data = np.memmap(file_path,
+                                         np.float32,
+                                         'c',
+                                         shape=dims)[idx].T
+                    else:
+                        idx = int(dims[2] // 2)
+                        data = np.memmap(file_path,
+                                         np.float32,
+                                         'c',
+                                         shape=dims)[:, :, idx]
 
             else:
                 raise ValueError(
                     "File size does not match the provided dimensions and no valid dimensions found in filename."
                 )
 
-    print('****************')
-    print(transpose)
-    print('****************')
-    if transpose:
-        data = data.T
     cmap = get_cmap_from(cmap)
     plt.figure(figsize=(width / 100, height / 100))
-    plt.imshow(data, cmap=cmap, aspect='auto')
+    v1, v2 = auto_clim(data, 1)
+    plt.imshow(data, cmap=cmap, aspect='auto', vmin=v1, vmax=v2)
     plt.colorbar()
     plt.tight_layout()
     if ndim == 2:
         plt.title(f"2D image with shape={data.shape}")
     else:
-        plt.title(f"3D image with shape={dims}, current inline is {idx}")
+        ids = 0 if transpose else 2
+        plt.title(f"3D image with shape={dims}, current idx(dim {ids}) is {idx}")
     # plt.tight_layout()
     plt.savefig(output_path, bbox_inches='tight', pad_inches=0.03)
     plt.close()
