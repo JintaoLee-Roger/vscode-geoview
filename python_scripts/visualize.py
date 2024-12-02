@@ -224,7 +224,7 @@ def visualize(
                 data = np.memmap(file_path, dtype, 'c', offset, shape)[:, :,
                                                                        idx]
     else:
-        dims = list(map(int, dims.split(',')))
+        dims = tuple(map(int, dims.split(',')))
         num_elements = np.prod(dims)
 
         # Check if the number of elements matches
@@ -240,11 +240,15 @@ def visualize(
             elif len(dims) == 3:
                 if transpose:
                     idx = int(dims[0] // 2)
-                    data = np.memmap(file_path, np.float32, 'c',
+                    data = np.memmap(file_path,
+                                     np.float32,
+                                     mode='c',
                                      shape=dims)[idx].T
                 else:
                     idx = int(dims[2] // 2)
-                    data = np.memmap(file_path, np.float32, 'c',
+                    data = np.memmap(file_path,
+                                     np.float32,
+                                     mode='c',
                                      shape=dims)[:, :, idx]
         else:
             # Extract dimensions from the filename
@@ -296,7 +300,12 @@ def visualize(
     cmap = get_cmap_from(cmap)
     plt.figure(figsize=(width / 100, height / 100))
     v1, v2 = auto_clim(data, vscale)
-    plt.imshow(data, cmap=cmap, aspect='auto', vmin=v1, vmax=v2, interpolation='bicubic')
+    plt.imshow(data,
+               cmap=cmap,
+               aspect='auto',
+               vmin=v1,
+               vmax=v2,
+               interpolation='bicubic')
     plt.colorbar()
     plt.tight_layout()
     if ndim == 2:

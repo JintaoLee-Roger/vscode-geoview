@@ -437,6 +437,39 @@ class GeoViewDocument implements vscode.CustomDocument {
   }
 }
 
+
+async function getPythonPath(): Promise<string> {
+  const pythonExtensionId = 'ms-python.python';
+  const pythonExtension = vscode.extensions.getExtension(pythonExtensionId);
+
+  if (pythonExtension && pythonExtension.isActive) {
+    // // Activate the Python extension if not already activated
+    // if (!pythonExtension.isActive) {
+    //   await pythonExtension.activate();
+    // }
+
+    // Access the interpreter path via the Python extension's API
+    const pythonApi = pythonExtension.exports;
+    if (pythonApi && pythonApi.settings) {
+      const executionDetails = pythonApi.settings.getExecutionDetails();
+      if (executionDetails && executionDetails.execCommand && executionDetails.execCommand.length > 0) {
+        const pythonPath = executionDetails.execCommand[0];
+        if (pythonPath) {
+          console.log(`[GeoView] Using Python interpreter from Python extension: ${pythonPath}`);
+          return pythonPath;
+        }
+      }
+    }
+  }
+
+  // If Python extension is not available or cannot provide the interpreter path
+  // Use the path from configuration or default to 'python'
+  const config = vscode.workspace.getConfiguration('geoview');
+  const pythonPath = config.get<string>('pythonPath', 'python');
+  console.log(`[GeoView] Using Python interpreter from configuration: ${pythonPath}`);
+  return pythonPath;
+}
+
 async function generateVisualization(
   filePath: string,
   workspacePath: string,
@@ -446,10 +479,13 @@ async function generateVisualization(
   vscale: number,
   context: vscode.ExtensionContext
 ): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<string>(async (resolve, reject) => {
     // Get user configuration
     const config = vscode.workspace.getConfiguration('geoview');
-    const pythonPath = config.get<string>('pythonPath', 'python');
+    // const pythonPath = config.get<string>('pythonPath', 'python');
+
+    let pythonPath = await getPythonPath();
+
     const scriptPath = config.get<string>(
       'scriptPath',
       path.join(context.extensionPath, 'python_scripts', 'visualize.py')
