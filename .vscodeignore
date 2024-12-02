@@ -25,3 +25,4 @@ build/
 *.pyw
 *.pyz
 *.pywz
+test*

@@ -15,4 +15,4 @@ build/
 *.pyc
 *.pyo
 *.pyd
-
+test*
