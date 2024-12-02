@@ -6,7 +6,7 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('GeoView extension is now active!');
 
   // Initialize settings storage for each file
-  const perFileSettings: { [key: string]: { cmap?: string; dataDimensions?: string; transpose?: boolean } } = {};
+  const perFileSettings: { [key: string]: { cmap?: string; dataDimensions?: string; transpose?: boolean; vscale?: number } } = {};
 
   // Register custom readonly editor
   const provider = new GeoViewEditorProvider(context, perFileSettings);
@@ -64,11 +64,12 @@ export function activate(context: vscode.ExtensionContext) {
           const fileSettings = perFileSettings[uri.toString()] || {};
           const dataDimensions = fileSettings.dataDimensions || vscode.workspace.getConfiguration('geoview').get<string>('defaultDimensions', '512,512');
           const transpose = fileSettings.transpose || vscode.workspace.getConfiguration('geoview').get<boolean>('transpose', true);
+          const vscale = fileSettings.vscale !== undefined ? fileSettings.vscale : vscode.workspace.getConfiguration('geoview').get<number>('vscale', 1.0);
 
           // Regenerate visualization
           let imagePath: string;
           try {
-            imagePath = await generateVisualization(uri.fsPath, workspacePath, selectedCmap, dataDimensions, transpose, context);
+            imagePath = await generateVisualization(uri.fsPath, workspacePath, selectedCmap, dataDimensions, transpose, vscale, context);
           } catch (error: any) {
             vscode.window.showErrorMessage(`GeoView Error: ${error.message}`);
             return;
@@ -119,6 +120,7 @@ export function activate(context: vscode.ExtensionContext) {
       // Get other parameters
       const cmap = fileSettings.cmap || vscode.workspace.getConfiguration('geoview').get<string>('cmap', 'gray');
       const dataDimensions = fileSettings.dataDimensions || vscode.workspace.getConfiguration('geoview').get<string>('defaultDimensions', '512,512');
+      const vscale = fileSettings.vscale !== undefined ? fileSettings.vscale : vscode.workspace.getConfiguration('geoview').get<number>('vscale', 1.0);
 
       // Get the corresponding document
       const document = GeoViewEditorProvider.getDocumentForUri(uri);
@@ -132,7 +134,7 @@ export function activate(context: vscode.ExtensionContext) {
       // Regenerate visualization
       let imagePath: string;
       try {
-        imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, newTranspose, context);
+        imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, newTranspose, vscale, context);
       } catch (error: any) {
         vscode.window.showErrorMessage(`GeoView Error: ${error.message}`);
         return;
@@ -170,7 +172,7 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly perFileSettings: { [key: string]: { cmap?: string; dataDimensions?: string; transpose?: boolean } }
+    private readonly perFileSettings: { [key: string]: { cmap?: string; dataDimensions?: string; transpose?: boolean; vscale?: number } }
   ) { }
 
   public static getPanelForUri(uri: vscode.Uri): vscode.WebviewPanel | undefined {
@@ -225,18 +227,20 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
     const defaultCmap = config.get<string>('cmap', 'gray');
     const defaultDimensions = config.get<string>('defaultDimensions', '512,512');
     const defaultTranspose = config.get<boolean>('transpose', true);
+    const defaultVscale = config.get<number>('vscale', 1.0);
 
     // Get settings for the specific file
     const fileSettings = this.perFileSettings[uri.toString()] || {};
     const cmap = fileSettings.cmap || defaultCmap;
     let dataDimensions: string = fileSettings.dataDimensions || defaultDimensions;
     const transpose: boolean = fileSettings.transpose || defaultTranspose;
+    const currentVscale: number = fileSettings.vscale !== undefined ? fileSettings.vscale : defaultVscale;
 
     let imagePath: string;
 
     try {
       // Call generateVisualization to generate the image
-      imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, transpose, this.context);
+      imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, transpose, currentVscale, this.context);
     } catch (error: any) {
       // If it's a dimension error, prompt the user to input new dimensions
       if (error.message === 'DimensionError') {
@@ -263,7 +267,7 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
         this.perFileSettings[uri.toString()].dataDimensions = dataDimensions;
 
         // Try generating visualization again
-        imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, transpose, this.context);
+        imagePath = await generateVisualization(uri.fsPath, workspacePath, cmap, dataDimensions, transpose, currentVscale, this.context);
       } else if (error.message === 'FormatError') {
         vscode.window.showErrorMessage('Invalid or unsupported file format.');
         return;
@@ -286,24 +290,126 @@ class GeoViewEditorProvider implements vscode.CustomReadonlyEditorProvider {
     console.log(`Image URI: ${imageUri.toString()}`);
 
     // Generate and set Webview content
-    webviewPanel.webview.html = this.getWebviewContent(imageUri);
+    webviewPanel.webview.html = this.getWebviewContent(imageUri, cmap, currentVscale);
 
     // Add message handling
     webviewPanel.webview.onDidReceiveMessage(async (message) => {
-      if (message.command === 'refresh') {
-        // Handle other messages if any
+      if (message.command === 'changeCmap') {
+        const selectedCmap = message.cmap;
+
+        // Update perFileSettings
+        const uriString = document.uri.toString();
+        this.perFileSettings[uriString] = this.perFileSettings[uriString] || {};
+        this.perFileSettings[uriString].cmap = selectedCmap;
+
+        // Get other parameters
+        const fileSettings = this.perFileSettings[uriString];
+        const dataDimensions = fileSettings.dataDimensions || vscode.workspace.getConfiguration('geoview').get<string>('defaultDimensions', '512,512');
+        const transpose = fileSettings.transpose !== undefined ? fileSettings.transpose : vscode.workspace.getConfiguration('geoview').get<boolean>('transpose', true);
+        const currentVscale = fileSettings.vscale !== undefined ? fileSettings.vscale : vscode.workspace.getConfiguration('geoview').get<number>('vscale', 1.0);
+
+        // Regenerate visualization
+        let imagePath: string;
+        try {
+          imagePath = await generateVisualization(document.uri.fsPath, document.workspacePath, selectedCmap, dataDimensions, transpose, currentVscale, this.context);
+        } catch (error: any) {
+          vscode.window.showErrorMessage(`GeoView Error: ${error.message}`);
+          return;
+        }
+
+        const tempDir = path.join(document.workspacePath, '.geoview_temp');
+        webviewPanel.webview.options = {
+          enableScripts: true,
+          localResourceRoots: [vscode.Uri.file(tempDir)],
+        };
+
+        const imageUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(imagePath));
+
+        // Send message to Webview to update the image
+        webviewPanel.webview.postMessage({ command: 'updateImage', imageUri: imageUri.toString() });
+      } else if (message.command === 'changeVscale') {
+        const newVscale = message.vscale;
+
+        // Update perFileSettings
+        const uriString = document.uri.toString();
+        this.perFileSettings[uriString] = this.perFileSettings[uriString] || {};
+        this.perFileSettings[uriString].vscale = newVscale;
+
+        // Get other parameters
+        const fileSettings = this.perFileSettings[uriString];
+        const cmap = fileSettings.cmap || defaultCmap;
+        const dataDimensions = fileSettings.dataDimensions || defaultDimensions;
+        const transpose = fileSettings.transpose !== undefined ? fileSettings.transpose : defaultTranspose;
+
+        // Regenerate visualization
+        let imagePath: string;
+        try {
+          imagePath = await generateVisualization(document.uri.fsPath, document.workspacePath, cmap, dataDimensions, transpose, newVscale, this.context);
+        } catch (error: any) {
+          vscode.window.showErrorMessage(`GeoView Error: ${error.message}`);
+          return;
+        }
+
+        const tempDir = path.join(document.workspacePath, '.geoview_temp');
+        webviewPanel.webview.options = {
+          enableScripts: true,
+          localResourceRoots: [vscode.Uri.file(tempDir)],
+        };
+
+        const imageUri = webviewPanel.webview.asWebviewUri(vscode.Uri.file(imagePath));
+
+        // Send message to Webview to update the image
+        webviewPanel.webview.postMessage({ command: 'updateImage', imageUri: imageUri.toString() });
       }
     });
   }
 
-  private getWebviewContent(imageUri: vscode.Uri): string {
+  private getWebviewContent(imageUri: vscode.Uri, currentCmap: string, currentVscale: number): string {
+    const cmapOptions = [
+      'viridis', 'gray', 'Petrel', 'jet', 'seismic', 'stratum', 'bwp', 'plasma',
+    ];
+
+    // Generate the options for the select element
+    const optionsHtml = cmapOptions.map(cmap => {
+      const selected = (cmap === currentCmap) ? 'selected' : '';
+      return `<option value="${cmap}" ${selected}>${cmap}</option>`;
+    }).join('\n');
+
     return `
       <!DOCTYPE html>
       <html lang="en">
       <body>
+        <div>
+          <label for="cmap-select">Colormap:</label>
+          <select id="cmap-select">
+            ${optionsHtml}
+          </select>
+          <label for="vscale-input">VScale:</label>
+          <input type="number" id="vscale-input" min="0.0001" max="1.3" step="0.0001" value="${currentVscale}" />
+        </div>
         <img id="geoview-image" src="${imageUri}" style="width: auto; height: 100%;" />
         <script>
           const vscode = acquireVsCodeApi();
+  
+          // Handle colormap selection change
+          document.getElementById('cmap-select').addEventListener('change', (event) => {
+            const selectedCmap = event.target.value;
+            vscode.postMessage({ command: 'changeCmap', cmap: selectedCmap });
+          });
+  
+          // Handle vscale input 'Enter' key event
+          document.getElementById('vscale-input').addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+              const vscaleValue = parseFloat(event.target.value);
+              if (isNaN(vscaleValue) || vscaleValue < 0.0001 || vscaleValue > 1.3) {
+                alert('Please enter a valid number between 0.0001 and 1.3 for vscale.');
+                return;
+              }
+              vscode.postMessage({ command: 'changeVscale', vscale: vscaleValue });
+            }
+          });
+  
+          // Listen for messages from the extension
           window.addEventListener('message', event => {
             const message = event.data;
             if (message.command === 'updateImage') {
@@ -337,6 +443,7 @@ async function generateVisualization(
   cmap: string,
   dataDimensions: string,
   transpose: boolean,
+  vscale: number,
   context: vscode.ExtensionContext
 ): Promise<string> {
   return new Promise<string>((resolve, reject) => {
@@ -379,6 +486,7 @@ async function generateVisualization(
     if (transpose) {
       args.push(`--transpose`);
     }
+    args.push(`--vscale=${vscale}`);
 
     // Execute Python script
     const command = `${pythonPath} ${args.map((a) => `"${a}"`).join(' ')}`;

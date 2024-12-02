@@ -192,13 +192,16 @@ def auto_clim(d, scale=1):
     return [v1 * scale, v2 * scale]
 
 
-def visualize(file_path,
-              output_path,
-              cmap='gray',
-              width=800,
-              height=600,
-              dims="512, 512",
-              transpose=True):
+def visualize(
+    file_path,
+    output_path,
+    cmap='gray',
+    width=800,
+    height=600,
+    dims="512, 512",
+    transpose=True,
+    vscale=1,
+):
     ndim = 2
     if file_path.endswith('.npy'):
         shape, dtype, offset = parser_npy_header(file_path)
@@ -292,15 +295,16 @@ def visualize(file_path,
 
     cmap = get_cmap_from(cmap)
     plt.figure(figsize=(width / 100, height / 100))
-    v1, v2 = auto_clim(data, 1)
-    plt.imshow(data, cmap=cmap, aspect='auto', vmin=v1, vmax=v2)
+    v1, v2 = auto_clim(data, vscale)
+    plt.imshow(data, cmap=cmap, aspect='auto', vmin=v1, vmax=v2, interpolation='bicubic')
     plt.colorbar()
     plt.tight_layout()
     if ndim == 2:
         plt.title(f"2D image with shape={data.shape}")
     else:
         ids = 0 if transpose else 2
-        plt.title(f"3D image with shape={dims}, current idx(dim {ids}) is {idx}")
+        plt.title(
+            f"3D image with shape={dims}, current idx(dim {ids}) is {idx}")
     # plt.tight_layout()
     plt.savefig(output_path, bbox_inches='tight', pad_inches=0.03)
     plt.close()
@@ -326,6 +330,7 @@ if __name__ == "__main__":
     parser.add_argument('--transpose',
                         action='store_true',
                         help='Transpose the image')
+    parser.add_argument('--vscale', type=float, default=1, help='Value scale')
     args = parser.parse_args()
 
     visualize(args.input,
@@ -334,4 +339,5 @@ if __name__ == "__main__":
               width=args.width,
               height=args.height,
               dims=args.dims,
-              transpose=args.transpose)
+              transpose=args.transpose,
+              vscale=args.vscale)
